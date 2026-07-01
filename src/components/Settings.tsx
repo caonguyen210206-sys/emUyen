@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Save, Download, Upload, CheckCircle2, AlertCircle, LogOut } from 'lucide-react';
 import { getSettings, saveSettings } from '../lib/storage';
+import { defineWord } from '../lib/gemini';
 import { UserSettings } from '../types';
 import { auth, signOut } from '../lib/firebase';
 
@@ -30,12 +31,7 @@ export default function Settings() {
   const handleTestConnection = async () => {
     setTestStatus('testing');
     try {
-      const res = await fetch('/api/define', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ word: 'hello', apiKey: settings.apiKey })
-      });
-      if (!res.ok) throw new Error('API request failed');
+      await defineWord('hello', settings.apiKey);
       setTestStatus('success');
     } catch (e) {
       setTestStatus('error');
@@ -108,7 +104,7 @@ export default function Settings() {
               <select 
                 value={settings.defaultQuestions}
                 onChange={e => setLocalSettings({...settings, defaultQuestions: Number(e.target.value)})}
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl font-bold focus:outline-none focus:border-[#4ADE80]"
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl font-bold focus:outline-none focus:border-[#A5D6A7]"
               >
                 <option value={10}>10 Questions</option>
                 <option value={20}>20 Questions</option>
@@ -117,7 +113,7 @@ export default function Settings() {
             </div>
             <div>
               <label className="block text-sm font-bold text-gray-600 mb-2">Checking Mode</label>
-              <select className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl font-bold focus:outline-none focus:border-[#4ADE80]">
+              <select className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl font-bold focus:outline-none focus:border-[#A5D6A7]">
                 <option value="flexible">Flexible (Case-insensitive)</option>
                 <option value="strict">Strict (Exact match)</option>
               </select>
