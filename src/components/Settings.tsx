@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Save, Download, Upload, CheckCircle2, AlertCircle, LogOut } from 'lucide-react';
 import { getSettings, saveSettings } from '../lib/storage';
-import { defineWord } from '../lib/gemini';
+import { defineWord, getSavedGeminiApiKey, saveGeminiApiKey } from '../lib/gemini';
 import { UserSettings } from '../types';
 import { auth, signOut } from '../lib/firebase';
 
@@ -17,18 +17,24 @@ export default function Settings() {
   useEffect(() => {
     const fetchData = async () => {
       const data = await getSettings();
-      setLocalSettings(data);
+      const savedApiKey = getSavedGeminiApiKey();
+      setLocalSettings({
+        ...data,
+        apiKey: data.apiKey || savedApiKey,
+      });
     };
     fetchData();
   }, []);
 
   const handleSave = async () => {
+    saveGeminiApiKey(settings.apiKey);
     await saveSettings(settings);
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 2000);
   };
 
   const handleTestConnection = async () => {
+    saveGeminiApiKey(settings.apiKey);
     setTestStatus('testing');
     try {
       await defineWord('hello', settings.apiKey);
@@ -74,7 +80,11 @@ export default function Settings() {
                 <input 
                   type="password" 
                   value={settings.apiKey}
-                  onChange={e => setLocalSettings({...settings, apiKey: e.target.value})}
+                  onChange={e => {
+                    const apiKey = e.target.value;
+                    setLocalSettings({...settings, apiKey});
+                    saveGeminiApiKey(apiKey);
+                  }}
                   placeholder="••••••••••••••••"
                   className="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl font-mono focus:outline-none focus:border-[#4ADE80] focus:ring-2 focus:ring-[#4ADE80]/20"
                 />
