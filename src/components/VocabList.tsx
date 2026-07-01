@@ -4,6 +4,18 @@ import { VocabItem } from '../types';
 import { getVocabItems, saveVocabItems, getSettings } from '../lib/storage';
 import { v4 as uuidv4 } from 'uuid';
 
+type VocabFilter =
+  | 'All'
+  | 'Studying'
+  | 'Completed'
+  | 'Mastery: New'
+  | 'Mastery: Mastery'
+  | 'Band: N/A'
+  | 'Band: 6'
+  | 'Band: 6.5'
+  | 'Band: 7'
+  | 'Band: 7.5';
+
 export default function VocabList() {
   const [items, setItems] = useState<VocabItem[]>([]);
   const [viewMode, setViewMode] = useState<'table' | 'card'>('card');
@@ -11,7 +23,7 @@ export default function VocabList() {
   const [newWord, setNewWord] = useState('');
   const [isDefining, setIsDefining] = useState(false);
   const [formData, setFormData] = useState<Partial<VocabItem>>({});
-  const [filter, setFilter] = useState<'All' | 'Studying' | 'Completed'>('All');
+  const [filter, setFilter] = useState<VocabFilter>('All');
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
 
   useEffect(() => {
@@ -88,7 +100,7 @@ export default function VocabList() {
     setItems(updated.filter(i => i.status !== 'Storage'));
   }
 
-  const filterOptions = [
+  const filterOptions: VocabFilter[] = [
     'All', 'Studying', 'Completed',
     'Mastery: New', 'Mastery: Mastery',
     'Band: N/A', 'Band: 6', 'Band: 6.5', 'Band: 7', 'Band: 7.5'
