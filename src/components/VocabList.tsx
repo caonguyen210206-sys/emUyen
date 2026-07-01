@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Wand2, Filter, Volume2, Save, X } from 'lucide-react';
 import { VocabItem } from '../types';
 import { getVocabItems, saveVocabItems, getSettings } from '../lib/storage';
-import { defineWord } from '../lib/gemini';
+import { defineWord, getSavedGeminiApiKey } from '../lib/gemini';
 import { v4 as uuidv4 } from 'uuid';
 
 type VocabFilter =
@@ -40,7 +40,8 @@ export default function VocabList() {
     setIsDefining(true);
     try {
       const settings = await getSettings();
-      const data = await defineWord(newWord, settings.apiKey);
+      const apiKey = settings.apiKey || getSavedGeminiApiKey();
+      const data = await defineWord(newWord, apiKey);
       
       if (data.correctedWord && data.correctedWord.toLowerCase() !== newWord.toLowerCase()) {
         setNewWord(data.correctedWord);
@@ -51,7 +52,8 @@ export default function VocabList() {
         ...data,
       });
     } catch (err) {
-      alert("Error auto defining: " + err);
+      const message = err instanceof Error ? err.message : String(err);
+      alert("Auto Define v2 error: " + message);
     } finally {
       setIsDefining(false);
     }
