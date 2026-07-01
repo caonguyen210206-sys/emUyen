@@ -12,64 +12,16 @@ import VocabList from './components/VocabList';
 import Practice from './components/Practice';
 import MonthlyReview from './components/MonthlyReview';
 import Settings from './components/Settings';
-import { Sparkles, LogIn } from 'lucide-react';
-import { auth, googleProvider, signInWithPopup, onAuthStateChanged, User } from './lib/firebase';
+import { Sparkles } from 'lucide-react';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<ViewState>('dashboard');
   const [showGreeting, setShowGreeting] = useState(true);
-  const [user, setUser] = useState<User | null>(null);
-  const [loadingAuth, setLoadingAuth] = useState(true);
 
   useEffect(() => {
     const timer = setTimeout(() => setShowGreeting(false), 3000);
     return () => clearTimeout(timer);
   }, []);
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setLoadingAuth(false);
-    });
-    return () => unsubscribe();
-  }, []);
-
-  const handleLogin = async () => {
-    try {
-      await signInWithPopup(auth, googleProvider);
-    } catch (error) {
-      console.error("Login failed", error);
-    }
-  };
-
-  if (loadingAuth) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-[#FAF9F6]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-500"></div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-[#FAF9F6]">
-        <div className="bg-white p-10 rounded-[2rem] card-shadow border border-pink-100 flex flex-col items-center text-center max-w-sm">
-          <div className="w-20 h-20 bg-pink-100 rounded-full flex items-center justify-center mb-6">
-            <Sparkles className="text-pink-500 w-10 h-10" />
-          </div>
-          <h1 className="text-3xl font-extrabold text-gray-800 mb-4 font-sans">Đăng nhập nhé 🥰</h1>
-          <p className="text-gray-500 mb-8 font-medium">Bắt đầu học từ vựng thôi nào!</p>
-          <button 
-            onClick={handleLogin}
-            className="flex items-center justify-center gap-3 w-full px-6 py-4 bg-pink-500 hover:bg-pink-600 text-white font-bold rounded-2xl shadow-sm transition-colors active:scale-95"
-          >
-            <LogIn size={20} />
-            Đăng nhập bằng Google
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="flex h-screen bg-[#FAF9F6] text-gray-800 font-sans overflow-hidden relative">
