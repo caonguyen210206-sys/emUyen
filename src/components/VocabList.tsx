@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Wand2, Filter, Volume2, Save, X } from 'lucide-react';
 import { VocabItem } from '../types';
 import { getVocabItems, saveVocabItems, getSettings } from '../lib/storage';
+import { defineWord } from '../lib/gemini';
 import { v4 as uuidv4 } from 'uuid';
 
 type VocabFilter =
@@ -39,13 +40,7 @@ export default function VocabList() {
     setIsDefining(true);
     try {
       const settings = await getSettings();
-      const res = await fetch('/api/define', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ word: newWord, apiKey: settings.apiKey })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const data = await defineWord(newWord, settings.apiKey);
       
       if (data.correctedWord && data.correctedWord.toLowerCase() !== newWord.toLowerCase()) {
         setNewWord(data.correctedWord);
