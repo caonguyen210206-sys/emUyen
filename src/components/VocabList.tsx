@@ -1,47 +1,32 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Plus, Wand2, Filter, Volume2, Save, X } from 'lucide-react';
 import { VocabItem } from '../types';
-import { getVocabItems, saveVocabItems, getSettings } from '../lib/storage';
-import { defineWord, getSavedGeminiApiKey } from '../lib/gemini';
+import { useVocab } from '../context/VocabContext';
 import { v4 as uuidv4 } from 'uuid';
 
-type VocabFilter =
-  | 'All'
-  | 'Studying'
-  | 'Completed'
-  | 'Mastery: New'
-  | 'Mastery: Mastery'
-  | 'Band: N/A'
-  | 'Band: 6'
-  | 'Band: 6.5'
-  | 'Band: 7'
-  | 'Band: 7.5';
-
 export default function VocabList() {
-  const [items, setItems] = useState<VocabItem[]>([]);
+  const { items, addVocabItem, updateVocabItems, settings } = useVocab();
   const [viewMode, setViewMode] = useState<'table' | 'card'>('card');
   const [showAddModal, setShowAddModal] = useState(false);
   const [newWord, setNewWord] = useState('');
   const [isDefining, setIsDefining] = useState(false);
   const [formData, setFormData] = useState<Partial<VocabItem>>({});
-  const [filter, setFilter] = useState<VocabFilter>('All');
+  const [filter, setFilter] = useState<'All' | 'Studying' | 'Completed'>('All');
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      const data = await getVocabItems();
-      setItems(data.filter(i => i.status !== 'Storage'));
-    };
-    fetchData();
-  }, []);
+  const activeItems = items.filter(i => i.status !== 'Storage');
 
   const handleAutoDefine = async () => {
     if (!newWord.trim()) return;
     setIsDefining(true);
     try {
-      const settings = await getSettings();
-      const apiKey = settings.apiKey || getSavedGeminiApiKey();
-      const data = await defineWord(newWord, apiKey);
+      const res = await fetch('/api/define', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ word: newWord, apiKey: settings.apiKey })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
       
       if (data.correctedWord && data.correctedWord.toLowerCase() !== newWord.toLowerCase()) {
         setNewWord(data.correctedWord);
@@ -52,8 +37,7 @@ export default function VocabList() {
         ...data,
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      alert("Auto Define v2 error: " + message);
+      console.error("Error auto defining:", err);
     } finally {
       setIsDefining(false);
     }
@@ -81,29 +65,24 @@ export default function VocabList() {
       ownerId: ''
     };
     
-    const allItems = await getVocabItems();
-    allItems.push(newItem);
-    await saveVocabItems(allItems);
-    setItems(allItems.filter(i => i.status !== 'Storage'));
+    await addVocabItem(newItem);
     setShowAddModal(false);
     setNewWord('');
     setFormData({});
   };
 
   const markLearned = async (id: string) => {
-    const all = await getVocabItems();
-    const updated = all.map(i => i.id === id ? { ...i, status: 'Completed' as const, masteryLevel: 'Mastery' as const } : i);
-    await saveVocabItems(updated);
-    setItems(updated.filter(i => i.status !== 'Storage'));
+    const updated = items.map(i => i.id === id ? { ...i, status: 'Completed' as const, masteryLevel: 'Mastery' as const } : i);
+    await updateVocabItems(updated);
   }
 
-  const filterOptions: VocabFilter[] = [
+  const filterOptions = [
     'All', 'Studying', 'Completed',
     'Mastery: New', 'Mastery: Mastery',
     'Band: N/A', 'Band: 6', 'Band: 6.5', 'Band: 7', 'Band: 7.5'
   ];
 
-  const filteredItems = items.filter(i => {
+  const filteredItems = activeItems.filter(i => {
     if (filter === 'All') return true;
     if (filter === 'Studying' || filter === 'Completed') return i.status === filter;
     if (filter === 'Mastery: New') return i.masteryLevel === 'New' || !i.masteryLevel;

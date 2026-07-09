@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Shuffle, CheckCircle, RefreshCcw, EyeOff, Eye } from 'lucide-react';
-import { VocabItem, QuizSession, QuizAnswer } from '../types';
-import { getVocabItems, saveVocabItems, getQuizSessions, saveQuizSession } from '../lib/storage';
+import { QuizSession, QuizAnswer } from '../types';
+import { useVocab } from '../context/VocabContext';
 import { v4 as uuidv4 } from 'uuid';
 
 export default function Practice() {
-  const [items, setItems] = useState<VocabItem[]>([]);
-  const [sessions, setSessions] = useState<QuizSession[]>([]);
+  const { items, sessions, updateVocabItems, addQuizSession } = useVocab();
   const [mode, setMode] = useState<'Vietnamese' | 'Foreign'>('Foreign');
   const [count, setCount] = useState(10);
   const [quizState, setQuizState] = useState<'idle' | 'active' | 'submitted' | 'flashcards'>('idle');
@@ -18,20 +17,12 @@ export default function Practice() {
   const [flashcardIdx, setFlashcardIdx] = useState(0);
   const [flashcardFlipped, setFlashcardFlipped] = useState(false);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      const fetchedItems = await getVocabItems();
-      setItems(fetchedItems.filter(i => i.status !== 'Storage'));
-      const fetchedSessions = await getQuizSessions();
-      setSessions(fetchedSessions);
-    };
-    fetchData();
-  }, []);
+  const activeItems = items.filter(i => i.status !== 'Storage');
 
   const prepareQuizSet = () => {
-    if (items.length === 0) return null;
-    const shuffled = [...items].sort(() => 0.5 - Math.random());
-    const selected = shuffled.slice(0, Math.min(count, items.length));
+    if (activeItems.length === 0) return null;
+    const shuffled = [...activeItems].sort(() => 0.5 - Math.random());
+    const selected = shuffled.slice(0, Math.min(count, activeItems.length));
     
     return selected.map(item => ({
       id: uuidv4(),
@@ -51,7 +42,7 @@ export default function Practice() {
 
   const generateQuiz = () => {
     const answers = prepareQuizSet();
-    if (!answers) return alert('No words available for practice.');
+    if (!answers) return;
     setCurrentAnswers(answers);
     setQuizState('active');
     setShowAnswers(false);
@@ -59,7 +50,7 @@ export default function Practice() {
 
   const startFlashcards = () => {
     const answers = prepareQuizSet();
-    if (!answers) return alert('No words available for practice.');
+    if (!answers) return;
     setCurrentAnswers(answers);
     setQuizState('flashcards');
     setFlashcardIdx(0);
@@ -79,8 +70,31 @@ export default function Practice() {
     let totalCorrect = 0;
     const evaluated = currentAnswers.map(ans => {
       const isC1 = ans.c1_answer?.toLowerCase().trim() === ans.c1_correct?.toLowerCase().trim();
-      const isC2 = ans.c2_answer?.toLowerCase().trim() === ans.c2_correct?.toLowerCase().trim();
-      const isC3 = (ans.c3_answer && ans.c3_correct) ? ans.c3_answer?.toLowerCase().trim() === ans.c3_correct?.toLowerCase().trim() : true;
+      
+      let isC2 = false;
+      const userAnsC2 = ans.c2_answer?.toLowerCase().trim() || "";
+      const correctAnsC2 = ans.c2_correct?.toLowerCase().trim() || "";
+      
+      if (userAnsC2 === correctAnsC2) {
+        isC2 = true;
+      } else {
+        const possibleAnswers = correctAnsC2.split(/[,;\/]+/).map(s => s.trim()).filter(s => s);
+        if (possibleAnswers.includes(userAnsC2)) {
+          isC2 = true;
+        }
+      }
+
+      let isC3 = true;
+      if (ans.c3_answer && ans.c3_correct) {
+        const userAnsC3 = ans.c3_answer.toLowerCase().trim();
+        const correctAnsC3 = ans.c3_correct.toLowerCase().trim();
+        if (userAnsC3 === correctAnsC3) {
+          isC3 = true;
+        } else {
+          const possibleAnswers = correctAnsC3.split(/[,;\/]+/).map(s => s.trim()).filter(s => s);
+          isC3 = possibleAnswers.includes(userAnsC3);
+        }
+      }
       const isFull = isC1 && isC2;
       if (isFull) totalCorrect++;
       return {
@@ -105,20 +119,21 @@ export default function Practice() {
       score: currentScore,
       savedAt: Date.now()
     };
-    await saveQuizSession(session);
-    setSessions([session, ...sessions]);
+    await addQuizSession(session);
 
     // Update vocabulary scores
-    const allItems = await getVocabItems();
+    const allItems = [...items];
     currentAnswers.forEach(ans => {
       const idx = allItems.findIndex(i => i.id === ans.vocabItemId);
       if (idx !== -1) {
-        allItems[idx].timesChecked = (allItems[idx].timesChecked || 0) + 1;
-        allItems[idx].lastScore = (ans.c1_isCorrect && ans.c2_isCorrect) ? 100 : 0;
+        allItems[idx] = {
+          ...allItems[idx],
+          timesChecked: (allItems[idx].timesChecked || 0) + 1,
+          lastScore: (ans.c1_isCorrect && ans.c2_isCorrect) ? 100 : 0
+        };
       }
     });
-    await saveVocabItems(allItems);
-    setItems(allItems.filter(i => i.status !== 'Storage'));
+    await updateVocabItems(allItems);
 
     setQuizState('idle');
     setCurrentAnswers([]);

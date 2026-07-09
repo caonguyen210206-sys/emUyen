@@ -33,6 +33,7 @@ export interface QuizSession {
   submittedAt?: number;
   savedAt?: number;
   ownerId?: string;
+  type?: string;
 }
 
 export interface QuizAnswer {

@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Download, FileUp } from 'lucide-react';
+import React, { useState } from 'react';
+import { Plus, Trash2, Sparkles, BookOpen, X, Loader2 } from 'lucide-react';
 import { ViewState, VocabItem } from '../types';
-import { getVocabItems, saveVocabItems } from '../lib/storage';
+import { useVocab } from '../context/VocabContext';
 import { v4 as uuidv4 } from 'uuid';
 
 interface LibraryProps {
@@ -9,79 +9,99 @@ interface LibraryProps {
 }
 
 export default function Library({ setCurrentView }: LibraryProps) {
-  const [items, setItems] = useState<VocabItem[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      const data = await getVocabItems();
-      setItems(data);
-    };
-    fetchData();
-  }, []);
+  const { items, updateVocabItems, removeVocabItems, settings } = useVocab();
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [aiModalMode, setAiModalMode] = useState<'none' | 'raw' | 'paragraph'>('none');
+  const [aiInputText, setAiInputText] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const addToList = async (id: string) => {
     const newItems = items.map(item => 
       item.id === id ? { ...item, status: 'Studying' as const } : item
     );
-    setItems(newItems);
-    await saveVocabItems(newItems);
+    await updateVocabItems(newItems);
   };
 
-  const exportCSV = () => {
-    const header = "word,meaning,type,band,source,status\n";
-    const csvContent = items.map(item => 
-      `${item.word},${item.meaning},${item.wordType},${item.band || ''},${item.source || ''},${item.status}`
-    ).join("\n");
-    const blob = new Blob([header + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", "vocab_library.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    alert('Đã xuất CSV!');
+  const toggleSelectAll = () => {
+    if (selectedIds.size === items.length && items.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(items.map(i => i.id)));
+    }
   };
 
-  const importCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const text = event.target?.result as string;
-      const lines = text.split('\n');
-      const newItems: VocabItem[] = [];
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-        const [word, meaning, type, band, source, status] = line.split(',');
-        newItems.push({
+  const toggleSelect = (id: string) => {
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Bạn có chắc muốn xoá ${selectedIds.size} từ vựng đã chọn?`)) return;
+
+    const idsToDelete = Array.from(selectedIds);
+    await removeVocabItems(idsToDelete);
+    setSelectedIds(new Set());
+  };
+
+  const processAiText = async () => {
+    if (!aiInputText.trim()) return;
+    setIsProcessing(true);
+    
+    try {
+      const endpoint = aiModalMode === 'raw' ? '/api/process-raw' : '/api/extract-vocab';
+      const bodyPayload = aiModalMode === 'raw' ? { rawText: aiInputText, apiKey: settings.apiKey } : { paragraph: aiInputText, apiKey: settings.apiKey };
+      
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bodyPayload)
+      });
+      
+      if (!res.ok) throw new Error('API processing failed');
+      const data = await res.json();
+      
+      if (Array.isArray(data) && data.length > 0) {
+        const newVocabItems: VocabItem[] = data.map(item => ({
+          ...item,
           id: uuidv4(),
-          word: word || '',
-          meaning: meaning || '',
-          wordType: type || '',
-          band: band || '',
-          source: source || '',
-          status: (status as any) || 'Storage',
+          status: 'Storage',
           masteryLevel: 'New',
-          ipa: '',
-          definition: '',
-          example: '',
-          synonyms: '',
-          antonyms: '',
-          topic: '',
+          source: aiModalMode === 'raw' ? 'AI Processed' : 'AI Extracted',
           createdAt: Date.now(),
           timesChecked: 0,
-        });
+          ipa: item.ipa || '',
+          definition: item.definition || '',
+          example: item.example || '',
+          synonyms: item.synonyms || '',
+          antonyms: item.antonyms || '',
+          topic: item.topic || '',
+        }));
+        
+        const updatedItems = [...items, ...newVocabItems];
+        await updateVocabItems(updatedItems);
+        
+        setAiModalMode('none');
+        setAiInputText('');
+        setCurrentView('vocab-list');
+      } else {
+        alert('Không tìm thấy từ vựng nào trong đoạn văn bản.');
+        setAiModalMode('none');
+        setAiInputText('');
       }
-      const updated = [...items, ...newItems];
-      setItems(updated);
-      await saveVocabItems(updated);
-      alert('Đã nhập CSV thành công!');
-    };
-    reader.readAsText(file);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    } catch (error) {
+      console.error(error);
+      alert('Có lỗi xảy ra khi xử lý dữ liệu.');
+      setAiModalMode('none');
+      setAiInputText('');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
@@ -92,26 +112,28 @@ export default function Library({ setCurrentView }: LibraryProps) {
           <p className="text-gray-500 font-medium mt-1">Kho lưu trữ từ vựng tổng</p>
         </div>
         <div className="flex gap-3">
-          <input 
-            type="file" 
-            accept=".csv" 
-            className="hidden" 
-            ref={fileInputRef} 
-            onChange={importCSV} 
-          />
+          {selectedIds.size > 0 && (
+            <button 
+              onClick={handleDeleteSelected}
+              className="flex items-center gap-2 px-5 py-2.5 bg-red-50 border-red-200 border-thin font-bold rounded-xl shadow-sm hover:bg-red-100 text-red-600 transition-colors"
+            >
+              <Trash2 size={18} />
+              Xoá ({selectedIds.size})
+            </button>
+          )}
           <button 
-            onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-2 px-5 py-2.5 bg-white border-thin font-bold rounded-xl shadow-sm hover:bg-gray-50 text-gray-700 transition-colors"
+            onClick={() => setAiModalMode('raw')}
+            className="flex items-center gap-2 px-5 py-2.5 bg-white border-thin font-bold rounded-xl shadow-sm hover:bg-purple-50 text-purple-700 transition-colors"
           >
-            <FileUp size={18} />
-            Import CSV
+            <Sparkles size={18} />
+            Xử lí dữ liệu thô
           </button>
           <button 
-            onClick={exportCSV}
-            className="flex items-center gap-2 px-5 py-2.5 bg-white border-thin font-bold rounded-xl shadow-sm hover:bg-gray-50 text-gray-700 transition-colors"
+            onClick={() => setAiModalMode('paragraph')}
+            className="flex items-center gap-2 px-5 py-2.5 bg-white border-thin font-bold rounded-xl shadow-sm hover:bg-blue-50 text-blue-700 transition-colors"
           >
-            <Download size={18} />
-            Export CSV
+            <BookOpen size={18} />
+            Lọc từ đoạn văn
           </button>
           <button 
             onClick={() => setCurrentView('vocab-list')}
@@ -128,6 +150,14 @@ export default function Library({ setCurrentView }: LibraryProps) {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-gray-50/50 border-b border-thin">
+                <th className="p-5 font-bold text-gray-500 w-12 text-center">
+                  <input 
+                    type="checkbox" 
+                    checked={selectedIds.size === items.length && items.length > 0}
+                    onChange={toggleSelectAll}
+                    className="w-4 h-4 rounded border-gray-300 text-[#2D5A27] focus:ring-[#2D5A27]"
+                  />
+                </th>
                 <th className="p-5 font-bold text-gray-500 w-32">Status</th>
                 <th className="p-5 font-bold text-gray-500">Word</th>
                 <th className="p-5 font-bold text-gray-500">Meaning</th>
@@ -139,6 +169,14 @@ export default function Library({ setCurrentView }: LibraryProps) {
             <tbody className="divide-y divide-gray-50">
               {items.map((item) => (
                 <tr key={item.id} className="hover:bg-gray-50/50 transition-colors">
+                  <td className="p-5 text-center">
+                    <input 
+                      type="checkbox" 
+                      checked={selectedIds.has(item.id)}
+                      onChange={() => toggleSelect(item.id)}
+                      className="w-4 h-4 rounded border-gray-300 text-[#2D5A27] focus:ring-[#2D5A27]"
+                    />
+                  </td>
                   <td className="p-5">
                     <span className={`px-3 py-1 rounded-full text-xs font-bold ${
                       item.status === 'Storage' ? 'bg-gray-100 text-gray-600' :
@@ -184,7 +222,7 @@ export default function Library({ setCurrentView }: LibraryProps) {
               ))}
               {items.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="p-12 text-center text-gray-400 font-medium">
+                  <td colSpan={7} className="p-12 text-center text-gray-400 font-medium">
                     Library is empty. Add some words to get started!
                   </td>
                 </tr>
@@ -193,6 +231,67 @@ export default function Library({ setCurrentView }: LibraryProps) {
           </table>
         </div>
       </div>
+
+      {/* AI Processing Modal */}
+      {aiModalMode !== 'none' && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden card-shadow animate-in zoom-in-95 duration-300">
+            <div className="flex items-center justify-between p-6 border-b border-thin bg-gray-50/50">
+              <h3 className="text-xl font-extrabold text-gray-800 flex items-center gap-2">
+                <Sparkles className="text-pink-500" />
+                {aiModalMode === 'raw' ? 'Xử lí dữ liệu thô bằng AI' : 'Lọc từ vựng từ đoạn văn bằng AI'}
+              </h3>
+              <button 
+                onClick={() => setAiModalMode('none')}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <p className="text-gray-600 font-medium mb-4">
+                {aiModalMode === 'raw' 
+                  ? 'Dán các từ vựng chưa định dạng (ví dụ: word - meaning) vào đây. AI sẽ tự động trích xuất và phân tích.'
+                  : 'Dán một đoạn văn tiếng Anh vào đây. AI sẽ lọc ra các từ vựng hay và quan trọng nhất cho bạn.'}
+              </p>
+              <textarea
+                value={aiInputText}
+                onChange={(e) => setAiInputText(e.target.value)}
+                placeholder="Nhập nội dung vào đây..."
+                className="w-full h-48 p-4 border-2 border-gray-200 rounded-2xl focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 outline-none transition-all resize-none font-medium text-gray-700"
+              />
+            </div>
+            
+            <div className="p-6 bg-gray-50/50 border-t border-thin flex justify-end gap-3">
+              <button
+                onClick={() => setAiModalMode('none')}
+                className="px-6 py-3 font-bold text-gray-600 bg-white border-2 border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+                disabled={isProcessing}
+              >
+                Huỷ
+              </button>
+              <button
+                onClick={processAiText}
+                disabled={!aiInputText.trim() || isProcessing}
+                className="flex items-center gap-2 px-6 py-3 font-bold text-white bg-[#2D5A27] rounded-xl hover:bg-[#1B3617] disabled:opacity-50 transition-colors shadow-sm"
+              >
+                {isProcessing ? (
+                  <>
+                    <Loader2 size={18} className="animate-spin" />
+                    Đang xử lí...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={18} />
+                    Xử lí ngay
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

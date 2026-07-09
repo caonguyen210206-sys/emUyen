@@ -64,8 +64,7 @@ service cloud.firestore {
 
     match /users/{userId} {
       match /vocabItems/{vocabItemId} {
-        allow get: if isOwner(userId) && existing().ownerId == request.auth.uid;
-        allow list: if isOwner(userId) && existing().ownerId == request.auth.uid;
+        allow read: if isOwner(userId);
         
         allow create: if isOwner(userId) 
           && isValidId(vocabItemId) 
@@ -77,12 +76,11 @@ service cloud.firestore {
           && incoming().ownerId == existing().ownerId
           && incoming().createdAt == existing().createdAt;
           
-        allow delete: if isOwner(userId) && existing().ownerId == request.auth.uid;
+        allow delete: if isOwner(userId);
       }
       
       match /quizSessions/{sessionId} {
-        allow get: if isOwner(userId) && existing().ownerId == request.auth.uid;
-        allow list: if isOwner(userId) && existing().ownerId == request.auth.uid;
+        allow read: if isOwner(userId);
         
         allow create: if isOwner(userId) 
           && isValidId(sessionId) 
@@ -93,12 +91,11 @@ service cloud.firestore {
           && isValidQuizSession(incoming())
           && incoming().ownerId == existing().ownerId;
           
-        allow delete: if isOwner(userId) && existing().ownerId == request.auth.uid;
+        allow delete: if isOwner(userId);
       }
       
       match /settings/{settingId} {
-        allow get: if isOwner(userId) && existing().ownerId == request.auth.uid;
-        allow list: if isOwner(userId) && existing().ownerId == request.auth.uid;
+        allow read: if isOwner(userId);
         
         allow create: if isOwner(userId) 
           && isValidId(settingId) 
@@ -109,7 +106,7 @@ service cloud.firestore {
           && isValidUserSettings(incoming())
           && incoming().ownerId == existing().ownerId;
           
-        allow delete: if isOwner(userId) && existing().ownerId == request.auth.uid;
+        allow delete: if isOwner(userId);
       }
     }
   }

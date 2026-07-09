@@ -25,7 +25,7 @@ export default function Sidebar({ currentView, setCurrentView }: SidebarProps) {
         </div>
         <div>
           <h1 className="text-3xl font-black text-[#2D5A27] tracking-tighter leading-none">Vocab của</h1>
-          <h1 className="text-3xl font-black text-[#2D5A27] tracking-tighter mt-1">em <span className="text-[#4ADE80]">Uyenn</span></h1>
+          <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#4ADE80] to-[#2D5A27] tracking-tighter mt-2 drop-shadow-md">UyenUyen</h1>
         </div>
       </div>
 
